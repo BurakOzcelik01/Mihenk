@@ -1,0 +1,60 @@
+# Otomatik canlıya alma (Cloudflare Workers).
+#
+# NEDEN VAR: ci.yml bilinçli olarak deploy içermiyor (bkz. o dosyadaki not).
+# Bu dosya ayrı tutuluyor çünkü ci.yml hem push hem pull_request'te çalışıyor;
+# deploy ise yalnızca main'e giren, testi geçmiş kod için olmalı.
+#
+# `main`'e her push testleri geçerse `wrangler.demo.jsonc` ile canlıya alınır
+# (asıl `wrangler.jsonc` değil — D1/Queues bağımlılığı yüzünden ücretsiz
+# planda deploy'u kırıyor, bkz. wrangler.jsonc içindeki §42 notu).
+#
+# Gerekli GitHub Secret: CLOUDFLARE_API_TOKEN
+# (Cloudflare Dashboard -> My Profile -> API Tokens -> "Edit Cloudflare Workers"
+# şablonuyla oluşturulur, repo Settings -> Secrets and variables -> Actions
+# altına eklenir.)
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Test + Canlıya Al (demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Bağımlılıkları kur
+        run: npm ci
+
+      - name: Tip denetimi (tsc --noEmit)
+        run: npm run lint
+
+      - name: Birim testleri (vitest)
+        run: npm test
+
+      - name: Cloudflare Workers'a yayınla
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy -c wrangler.demo.jsonc --minify
