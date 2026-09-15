@@ -8,10 +8,18 @@
 # (asıl `wrangler.jsonc` değil — D1/Queues bağımlılığı yüzünden ücretsiz
 # planda deploy'u kırıyor, bkz. wrangler.jsonc içindeki §42 notu).
 #
-# Gerekli GitHub Secret: CLOUDFLARE_API_TOKEN
+# Gerekli GitHub Secret'lar: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
 # (Cloudflare Dashboard -> My Profile -> API Tokens -> "Edit Cloudflare Workers"
 # şablonuyla oluşturulur, repo Settings -> Secrets and variables -> Actions
 # altına eklenir.)
+#
+# Deploy adımı `cloudflare/wrangler-action` KULLANMIYOR: o action varsayılan
+# olarak kendi Wrangler sürümünü (3.90.0) kurmaya çalışıyor ve bu, projenin
+# `@cloudflare/workers-types` v5 bağımlılığıyla ERESOLVE çakışmasına giriyor
+# (ilk deploy denemesinde ölçüldü — bkz. commit geçmişi). Proje zaten
+# `wrangler@^4.125.0`'ı devDependency olarak taşıyor; `npm ci` onu kurar,
+# `npx wrangler` de doğrudan onu kullanır. Node sürümü 22'ye çıkarıldı çünkü
+# wrangler 4.125'in kendi `engines` alanı Node >=22 istiyor.
 
 name: Deploy
 
@@ -40,7 +48,7 @@ jobs:
       - name: Node.js kur
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - name: Bağımlılıkları kur
@@ -53,8 +61,7 @@ jobs:
         run: npm test
 
       - name: Cloudflare Workers'a yayınla
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy -c wrangler.demo.jsonc --minify
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy -c wrangler.demo.jsonc --minify
